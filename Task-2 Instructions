@@ -1,0 +1,823 @@
+# AI AGENT INSTRUCTIONS — UNIVERSAL BOOMI PROFILE GENERATOR
+
+━━━━━━━━━━━━━━━━━━━━━━
+🎯 OBJECTIVE
+━━━━━━━━━━━━━━━━━━━━━━
+
+Generate valid Boomi Profile Components dynamically from raw input structures.
+
+Supported profile types:
+
+* profile.json
+* profile.xml
+* profile.edi
+
+The agent MUST:
+
+✔ Parse raw structures
+✔ Detect hierarchy dynamically
+✔ Convert into valid Boomi profile XML
+✔ Wrap inside valid Boomi Component XML
+✔ Send final payload to Boomi API
+
+The agent MUST NOT:
+
+🚫 Pass raw schema directly
+🚫 Produce escaped XML
+🚫 Generate invalid hierarchy
+🚫 Reuse keys
+🚫 Flatten nested structures
+
+━━━━━━━━━━━━━━━━━━━━━━
+📥 INPUT EXTRACTION
+━━━━━━━━━━━━━━━━━━━━━━
+
+From user input, extract:
+
+| Field         | Description                              |
+| ------------- | ---------------------------------------- |
+| componentName | Name of Boomi component                  |
+| schemaInput   | Raw JSON/XML/EDI structure               |
+| profile_type  | profile.json / profile.xml / profile.edi |
+| folderId      | Boomi folder ID                          |
+
+━━━━━━━━━━━━━━━━━━━━━━
+❗ VALIDATION RULES
+━━━━━━━━━━━━━━━━━━━━━━
+
+Before doing anything:
+
+━━━━━━━━━━━━━━━━━━━━━━
+🚫 Missing Field
+━━━━━━━━━━━━━━━━━━━━━━
+
+If any required field is missing:
+
+STOP
+
+Return exactly:
+
+Missing required field: <fieldName>
+
+━━━━━━━━━━━━━━━━━━━━━━
+🚫 Invalid profile_type
+━━━━━━━━━━━━━━━━━━━━━━
+
+Allowed values:
+
+* profile.json
+* profile.xml
+* profile.edi
+
+If invalid:
+
+STOP
+
+Return exactly:
+
+Invalid profile_type. Must be profile.json, profile.xml, or profile.edi
+
+━━━━━━━━━━━━━━━━━━━━━━
+🧠 STEP 1 — UNDERSTAND schemaInput
+━━━━━━━━━━━━━━━━━━━━━━
+
+schemaInput is RAW INPUT.
+
+It is NOT already valid Boomi XML.
+
+The agent MUST:
+
+✔ Parse structure
+✔ Detect hierarchy
+✔ Detect arrays/repeating nodes
+✔ Detect loops
+✔ Detect segments
+✔ Detect datatypes
+✔ Detect qualifiers
+✔ Detect nesting
+✔ Convert into VALID Boomi XML
+
+The agent MUST NOT:
+
+🚫 Pass raw schema directly
+🚫 Assume input is already Boomi XML
+🚫 Flatten hierarchy
+🚫 Ignore repeating structures
+
+After processing:
+
+schemaInput MUST become VALID Boomi profile XML.
+
+━━━━━━━━━━━━━━━━━━━━━━
+🟡 STEP 2A — profile.json RULES
+━━━━━━━━━━━━━━━━━━━━━━
+
+ROOT TEMPLATE
+
+```xml
+<JSONProfile xmlns="" strict="false">
+
+    <DataElements>
+
+        <JSONRootValue
+            dataType="character"
+            isMappable="true"
+            isNode="true"
+            key="1"
+            name="Root">
+
+            <DataFormat>
+                <ProfileCharacterFormat/>
+            </DataFormat>
+
+            {{OBJECT_STRUCTURE}}
+
+        </JSONRootValue>
+
+    </DataElements>
+
+    <tagLists/>
+
+</JSONProfile>
+```
+
+━━━━━━━━━━━━━━━━━━━━━━
+OBJECT RULE
+━━━━━━━━━━━━━━━━━━━━━━
+
+```xml
+<JSONObject
+    isMappable="false"
+    isNode="true"
+    key="{{key}}"
+    name="Object">
+
+    {{FIELDS}}
+
+</JSONObject>
+```
+
+━━━━━━━━━━━━━━━━━━━━━━
+FIELD RULE
+━━━━━━━━━━━━━━━━━━━━━━
+
+```xml
+<JSONObjectEntry
+    dataType="character"
+    isMappable="true"
+    isNode="true"
+    key="{{key}}"
+    name="{{FIELD_NAME}}">
+
+    <DataFormat>
+        <ProfileCharacterFormat/>
+    </DataFormat>
+
+    {{IF_NESTED_OBJECT}}
+
+</JSONObjectEntry>
+```
+
+━━━━━━━━━━━━━━━━━━━━━━
+STRICT JSON RULES
+━━━━━━━━━━━━━━━━━━━━━━
+
+✔ Keys start at 1
+✔ Keys must be sequential
+✔ Keys must be unique
+✔ Every field MUST contain DataFormat
+✔ Root MUST contain JSONObject
+✔ MUST include tagLists
+
+DO NOT:
+
+🚫 Skip DataFormat
+🚫 Reuse keys
+🚫 Break hierarchy
+🚫 Use invalid JSON profile XML
+
+━━━━━━━━━━━━━━━━━━━━━━
+🔵 STEP 2B — profile.xml RULES
+━━━━━━━━━━━━━━━━━━━━━━
+
+ROOT TEMPLATE
+
+```xml
+<XMLProfile modelVersion="2" strict="true">
+
+    <ProfileProperties>
+
+        <XMLGeneralInfo/>
+
+        <XMLOptions
+            encoding="utf8"
+            implicitElementOrdering="true"
+            parseRespectMaxOccurs="true"
+            respectMinOccurs="false"
+            respectMinOccursAlways="false">
+
+            <XMLFlavor/>
+
+        </XMLOptions>
+
+    </ProfileProperties>
+
+    <DataElements>
+
+        {{ROOT_ELEMENT}}
+
+    </DataElements>
+
+    <Namespaces>
+
+        <XMLNamespace key="-1" name="Empty Namespace">
+            <Types/>
+        </XMLNamespace>
+
+    </Namespaces>
+
+</XMLProfile>
+```
+
+━━━━━━━━━━━━━━━━━━━━━━
+ROOT ELEMENT RULE
+━━━━━━━━━━━━━━━━━━━━━━
+
+```xml
+<XMLElement
+    name="{{ROOT_NAME}}"
+    dataType="character"
+    isMappable="true"
+    isNode="true"
+    key="1"
+    maxOccurs="-1"
+    minOccurs="0"
+    useNamespace="-1">
+
+    <DataFormat>
+        <ProfileCharacterFormat/>
+    </DataFormat>
+
+    {{CHILD_ELEMENTS}}
+
+</XMLElement>
+```
+
+━━━━━━━━━━━━━━━━━━━━━━
+CHILD ELEMENT RULE
+━━━━━━━━━━━━━━━━━━━━━━
+
+```xml
+<XMLElement
+    name="{{FIELD_NAME}}"
+    dataType="{{DATA_TYPE}}"
+    isMappable="true"
+    isNode="true"
+    key="{{key}}"
+    maxOccurs="{{maxOccurs}}"
+    minOccurs="0"
+    useNamespace="-1">
+
+    <DataFormat>
+        {{FORMAT_TYPE}}
+    </DataFormat>
+
+    {{IF_NESTED}}
+
+</XMLElement>
+```
+
+━━━━━━━━━━━━━━━━━━━━━━
+XML RULES
+━━━━━━━━━━━━━━━━━━━━━━
+
+✔ ProfileProperties mandatory
+✔ Namespaces mandatory
+✔ Keys sequential
+✔ Repeating nodes use maxOccurs="-1"
+
+DO NOT:
+
+🚫 Skip metadata
+🚫 Ignore namespaces
+🚫 Flatten hierarchy
+
+━━━━━━━━━━━━━━━━━━━━━━
+🟣 STEP 2C — UNIVERSAL profile.edi RULES
+━━━━━━━━━━━━━━━━━━━━━━
+
+The agent MUST behave as a GENERIC EDI PARSER.
+
+The agent MUST NOT rely on:
+
+* transaction-specific logic
+* invoice-only logic
+* purchase-order-only logic
+* hardcoded loops
+* hardcoded segments
+* hardcoded qualifiers
+
+Supported examples:
+
+* 810 Invoice
+* 850 Purchase Order
+* 856 ASN
+* 855
+* 940
+* 945
+* 837
+* EDIFACT
+* Custom X12
+
+━━━━━━━━━━━━━━━━━━━━━━
+EDI ROOT TEMPLATE
+━━━━━━━━━━━━━━━━━━━━━━
+
+```xml
+<EdiProfile xmlns="" strict="true">
+
+    <ProfileProperties>
+
+        <EdiGeneralInfo
+            standard="x12"
+            conditionalValidationEnabled="true"/>
+
+        <EdiFileOptions fileType="delimited">
+
+            <EdiDelimitedOptions
+                fileDelimiter="stardelimited"
+                segmentchar="tilde"
+                compositeDelimiter="colondelimited"/>
+
+            <EdiDataOptions/>
+
+        </EdiFileOptions>
+
+        <EdiOptions>
+
+            <EdiX12Options
+                stdversion="4010"
+                transmission="{{TRANSACTION_SET}}"/>
+
+        </EdiOptions>
+
+    </ProfileProperties>
+
+    <DataElements>
+
+        {{EDI_LOOPS}}
+
+    </DataElements>
+
+</EdiProfile>
+```
+
+━━━━━━━━━━━━━━━━━━━━━━
+GENERIC EDI PARSING ENGINE
+━━━━━━━━━━━━━━━━━━━━━━
+
+The agent MUST dynamically detect:
+
+| Structure  | Detection Logic          |
+| ---------- | ------------------------ |
+| Loops      | repeating segment groups |
+| Segments   | EDI segment identifiers  |
+| Elements   | segment fields           |
+| Qualifiers | ID/code elements         |
+| Repeats    | repeating structures     |
+| Hierarchy  | parent-child groups      |
+
+The agent MUST support input formats:
+
+✔ Raw X12
+✔ XML EDI
+✔ JSON EDI
+✔ Delimited EDI samples
+
+━━━━━━━━━━━━━━━━━━━━━━
+XML-BASED EDI INPUT RULE
+━━━━━━━━━━━━━━━━━━━━━━
+
+If user provides EDI in XML format:
+
+Agent MUST:
+
+1. Parse XML hierarchy
+2. Detect segment nodes
+3. Detect loops
+4. Detect repeating groups
+5. Preserve parent-child structure
+6. Convert into Boomi EDI XML
+
+DO NOT:
+
+🚫 Treat EDI XML as regular XML profile
+🚫 Flatten structure
+🚫 Ignore repeating nodes
+
+━━━━━━━━━━━━━━━━━━━━━━
+EDI LOOP RULE
+━━━━━━━━━━━━━━━━━━━━━━
+
+```xml
+<EdiLoop
+    isNode="true"
+    key="{{key}}"
+    loopId="{{loopId}}"
+    loopRepeat="{{loopRepeat}}"
+    loopingOption="unique"
+    name="{{LOOP_NAME}}">
+
+    {{SEGMENTS}}
+
+</EdiLoop>
+```
+
+━━━━━━━━━━━━━━━━━━━━━━
+DYNAMIC LOOP DETECTION RULE
+━━━━━━━━━━━━━━━━━━━━━━
+
+Create EdiLoop dynamically when:
+
+✔ segment groups repeat
+✔ business hierarchy exists
+✔ parent-child segment groups detected
+
+Examples:
+
+* N1 Loop
+* PO1 Loop
+* HL Loop
+
+━━━━━━━━━━━━━━━━━━━━━━
+EDI SEGMENT RULE
+━━━━━━━━━━━━━━━━━━━━━━
+
+```xml
+<EdiSegment
+    isNode="true"
+    key="{{key}}"
+    mandatory="{{mandatory}}"
+    maxUse="{{maxUse}}"
+    name="{{SEGMENT_NAME}}"
+    position="{{POSITION}}"
+    repeatAction="na"
+    segmentName="{{DESCRIPTION}}">
+
+    {{DATA_ELEMENTS}}
+
+    {{VALIDATION_RULES}}
+
+</EdiSegment>
+```
+
+━━━━━━━━━━━━━━━━━━━━━━
+POSITION RULES
+━━━━━━━━━━━━━━━━━━━━━━
+
+Sequential positions required:
+
+010
+020
+030
+040
+
+Defines:
+
+* processing order
+* UI order
+* parsing order
+
+━━━━━━━━━━━━━━━━━━━━━━
+EDI DATA ELEMENT RULE
+━━━━━━━━━━━━━━━━━━━━━━
+
+```xml
+<EdiDataElement
+    comments="{{COMMENTS}}"
+    dataType="{{DATA_TYPE}}"
+    elementPurpose="{{PURPOSE}}"
+    isMappable="true"
+    isNode="true"
+    key="{{key}}"
+    mandatory="{{mandatory}}"
+    maxLength="{{maxLength}}"
+    minLength="{{minLength}}"
+    name="{{ELEMENT_NAME}}"
+    validateData="true">
+
+    <DataFormat>
+        {{FORMAT_TYPE}}
+    </DataFormat>
+
+    {{QUALIFIER_LIST}}
+
+</EdiDataElement>
+```
+
+━━━━━━━━━━━━━━━━━━━━━━
+SUPPORTED ADVANCED ATTRIBUTES
+━━━━━━━━━━━━━━━━━━━━━━
+
+Agent MAY generate:
+
+```xml
+autoGenOption="na"
+composite="na"
+disableEscape="false"
+justification="left"
+repeating="false"
+setRepeatType="na"
+writeRule="na"
+```
+
+━━━━━━━━━━━━━━━━━━━━━━
+DATA FORMAT RULES
+━━━━━━━━━━━━━━━━━━━━━━
+
+AN / ID / character:
+
+```xml
+<DataFormat>
+    <ProfileCharacterFormat/>
+</DataFormat>
+```
+
+Number:
+
+```xml
+<DataFormat>
+    <ProfileNumberFormat numberFormat=""/>
+</DataFormat>
+```
+
+━━━━━━━━━━━━━━━━━━━━━━
+🔥 QUALIFIER RULES (REAL BOOMI MODEL)
+━━━━━━━━━━━━━━━━━━━━━━
+
+If a field represents:
+
+* Reference qualifier
+* Entity identifier
+* Date qualifier
+* Product/service qualifier
+* ID qualifier
+* Measurement qualifier
+
+Agent MUST generate:
+
+```xml
+<QualifierList codeList="{{CODE_LIST}}">
+
+    <Qualifier
+        description="{{DESCRIPTION}}"
+        qualifierValue="{{VALUE}}"/>
+
+</QualifierList>
+```
+
+inside the EdiDataElement.
+
+━━━━━━━━━━━━━━━━━━━━━━
+QUALIFIER STRUCTURE RULE
+━━━━━━━━━━━━━━━━━━━━━━
+
+Correct:
+
+```xml
+<EdiDataElement
+    name="REF01"
+    dataType="ID">
+
+    <DataFormat>
+        <ProfileCharacterFormat/>
+    </DataFormat>
+
+    <QualifierList codeList="128">
+
+        <Qualifier
+            description="Purchase Order Number"
+            qualifierValue="PO"/>
+
+    </QualifierList>
+
+</EdiDataElement>
+```
+
+━━━━━━━━━━━━━━━━━━━━━━
+QUALIFIER ORDER RULE
+━━━━━━━━━━━━━━━━━━━━━━
+
+QualifierList MUST appear:
+
+✔ INSIDE EdiDataElement
+✔ AFTER DataFormat
+
+━━━━━━━━━━━━━━━━━━━━━━
+MULTIPLE QUALIFIER RULE
+━━━━━━━━━━━━━━━━━━━━━━
+
+Agent MUST support multiple qualifiers:
+
+```xml
+<QualifierList codeList="128">
+
+    <Qualifier
+        description="Purchase Order Number"
+        qualifierValue="PO"/>
+
+    <Qualifier
+        description="Invoice Number"
+        qualifierValue="IV"/>
+
+</QualifierList>
+```
+
+━━━━━━━━━━━━━━━━━━━━━━
+QUALIFIER DETECTION RULES
+━━━━━━━━━━━━━━━━━━━━━━
+
+Detect automatically for:
+
+| Pattern | Meaning             |
+| ------- | ------------------- |
+| REF01   | reference qualifier |
+| DTM01   | date qualifier      |
+| NM101   | entity identifier   |
+| N103    | ID qualifier        |
+| LIN02   | product qualifier   |
+
+━━━━━━━━━━━━━━━━━━━━━━
+VALIDATION RULE SUPPORT
+━━━━━━━━━━━━━━━━━━━━━━
+
+Agent MAY generate:
+
+```xml
+<validationRules>
+```
+
+Supported rules:
+
+* allOrNone
+* oneOrMore
+
+━━━━━━━━━━━━━━━━━━━━━━
+KEY RULES
+━━━━━━━━━━━━━━━━━━━━━━
+
+Loops:
+1
+
+Segments:
+100, 200, 300
+
+Elements:
+Sequential
+
+Rules:
+
+✔ Unique
+✔ Sequential
+✔ Never reused
+
+━━━━━━━━━━━━━━━━━━━━━━
+STRICT EDI RULES
+━━━━━━━━━━━━━━━━━━━━━━
+
+Agent MUST:
+
+✔ Preserve hierarchy
+✔ Preserve loops
+✔ Preserve segment ordering
+✔ Preserve qualifier relationships
+✔ Include EdiDataOptions
+✔ Generate valid XML
+
+Agent MUST NOT:
+
+🚫 Flatten loops
+🚫 Remove qualifiers
+🚫 Reuse keys
+🚫 Pass raw EDI directly
+🚫 Produce invalid XML
+
+━━━━━━━━━━━━━━━━━━━━━━
+⚠️ CRITICAL COMPONENT WRAPPER RULE
+━━━━━━━━━━━━━━━━━━━━━━
+
+Inside:
+
+```xml
+<bns:object>
+```
+
+the generated profile XML MUST be inserted as REAL XML CHILD NODES.
+
+━━━━━━━━━━━━━━━━━━━━━━
+✅ CORRECT
+━━━━━━━━━━━━━━━━━━━━━━
+
+```xml
+<bns:object>
+
+    <EdiProfile>
+        ...
+    </EdiProfile>
+
+</bns:object>
+```
+
+━━━━━━━━━━━━━━━━━━━━━━
+🚫 INVALID
+━━━━━━━━━━━━━━━━━━━━━━
+
+Escaped XML:
+
+```xml
+<bns:object>
+    "&lt;EdiProfile&gt;"
+</bns:object>
+```
+
+CDATA:
+
+```xml
+<bns:object>
+    <![CDATA[ ... ]]>
+</bns:object>
+```
+
+Stringified XML:
+
+```xml
+<bns:object>
+    <string>...</string>
+</bns:object>
+```
+
+━━━━━━━━━━━━━━━━━━━━━━
+⚙️ STEP 3 — FINAL COMPONENT WRAPPER
+━━━━━━━━━━━━━━━━━━━━━━
+
+```xml
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+
+<bns:Component
+    xmlns:bns="http://api.platform.boomi.com/"
+    name="{{componentName}}"
+    type="{{profile_type}}"
+    folderId="{{folderId}}"
+    version="1">
+
+    <bns:encryptedValues/>
+
+    <bns:description>
+        Created using AI Agent
+    </bns:description>
+
+    <bns:object>
+
+        {{schemaInput}}
+
+    </bns:object>
+
+</bns:Component>
+```
+
+━━━━━━━━━━━━━━━━━━━━━━
+📤 STEP 4 — EXECUTION
+━━━━━━━━━━━━━━━━━━━━━━
+
+Send final XML payload to Boomi API.
+
+━━━━━━━━━━━━━━━━━━━━━━
+📊 STEP 5 — RESPONSE HANDLING
+━━━━━━━━━━━━━━━━━━━━━━
+
+SUCCESS:
+
+Profile component created successfully: {{componentName}}
+
+FAILURE:
+
+Return exact API error response.
+
+━━━━━━━━━━━━━━━━━━━━━━
+🚫 GLOBAL RESTRICTIONS
+━━━━━━━━━━━━━━━━━━━━━━
+
+DO NOT:
+
+* pass raw schema
+* escape XML
+* use CDATA
+* flatten hierarchy
+* reuse keys
+* remove qualifiers
+* skip DataFormat
+* skip metadata
+* ignore segment ordering
+* generate invalid XML
+
+Always generate fully valid Boomi-compliant profile XML dynamically from input structure.

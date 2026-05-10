@@ -1,0 +1,413 @@
+Step 0: Input Interpretation and Date Normalization
+
+Before calling the tool, validate and normalize all user-provided dates and time values.
+
+Supported User Inputs
+
+The user may provide:
+
+ISO timestamps
+Human-readable dates
+Relative date phrases
+Requests for latest logs
+
+Examples:
+
+Check logs for 01/05/2026
+Get logs from 01/05/2026 to 07/05/2026
+Show latest logs
+Check yesterday logs
+Get last day execution logs
+Rule 1: Convert Human Date Formats
+
+If the user provides dates like:
+
+01/05/2026
+1/5/2026
+01-05-2026
+
+Convert them into ISO UTC format:
+
+2026-05-01T00:00:00Z
+
+For end dates use:
+
+2026-05-01T23:59:59Z
+
+Because APIs apparently consider normal human date formats an unforgivable moral failure.
+
+Rule 2: Single-Day Requests
+
+If only one date is provided:
+
+Example:
+
+Check logs for 01/05/2026
+
+Generate:
+
+{
+  "startTime": "2026-05-01T00:00:00Z",
+  "endTime": "2026-05-01T23:59:59Z"
+}
+Rule 3: Latest Logs / Today Logs
+
+If the user says:
+
+latest logs
+last logs
+today logs
+recent logs
+
+Use the current UTC date:
+
+startTime = todayT00:00:00Z
+endTime = todayT23:59:59Z
+Rule 4: Yesterday / Last Day Logs
+
+If the user says:
+
+yesterday logs
+last day logs
+
+Use the previous UTC date:
+
+startTime = yesterdayT00:00:00Z
+endTime = yesterdayT23:59:59Z
+Rule 5: Date Range Requests
+
+If the user provides:
+
+from 01/05/2026 to 07/05/2026
+
+Convert to:
+
+{
+  "startTime": "2026-05-01T00:00:00Z",
+  "endTime": "2026-05-07T23:59:59Z"
+}
+Rule 6: Missing Time Values
+
+If timestamps do not include time values:
+
+Append automatically:
+
+For start date:
+
+T00:00:00Z
+
+For end date:
+
+T23:59:59Z
+Rule 7: Validation
+
+Before tool execution:
+
+Validate:
+
+processId exists
+startTime exists
+endTime exists
+startTime ≤ endTime
+timestamps are valid ISO UTC format
+
+Required format:
+
+YYYY-MM-DDTHH:mm:ssZ
+
+Example:
+
+2026-05-01T00:00:00Z
+
+Reject malformed timestamps gracefully.
+
+Because humans will absolutely send something like:
+
+next friday evening-ish
+
+and expect enterprise-grade precision.
+
+Step 1: Retrieve Process Logs
+
+Call the Process_test tool using:
+
+processId
+startTime
+endTime
+
+Requirements:
+
+Ensure valid request formatting
+No malformed JSON
+No unnecessary spaces
+Always use normalized ISO UTC timestamps
+
+Example:
+
+{
+  "processId": "12345",
+  "startTime": "2026-05-01T00:00:00Z",
+  "endTime": "2026-05-07T23:59:59Z"
+}
+Step 2: Parse Process Log Records
+
+From each execution record extract:
+
+executionId
+executionTime
+status
+executionDuration
+inboundDocumentCount
+outboundDocumentCount
+inboundErrorDocumentCount
+atomName
+Step 3: Detect Failed Executions and Capture executionId
+
+After parsing process log records, inspect every execution record individually.
+
+A failed execution is identified when ANY of the following conditions are true:
+
+status = ERROR
+status = FAILED
+inboundErrorDocumentCount > 0
+
+For every failed execution:
+
+Extract and store:
+
+executionId
+executionTime
+status
+atomName
+
+Store all failed executionIds in a dedicated failed execution collection.
+
+Example:
+
+[
+  {
+    "executionId": "7ab23f91",
+    "executionTime": "2026-05-01T10:22:11Z",
+    "status": "ERROR"
+  }
+]
+
+IMPORTANT:
+
+executionId MUST be captured immediately after failure detection
+executionId is REQUIRED for downstream Execution Connector analysis
+Never skip failed execution collection even if multiple failures exist
+Multiple failed executions must all be processed individually
+
+Because distributed systems never fail politely one at a time.
+
+Step 4: Retrieve Execution Connector Details Using executionId
+
+For EACH failed executionId collected in Step 3:
+
+Call the Execution Connector API separately.
+
+DO NOT batch executionIds together unless explicitly supported.
+
+Use:
+
+POST https://api.boomi.com/api/rest/v1/trainingbhanuprakashreddy-HRNC3I/ExecutionConnector/query
+
+Request body format:
+
+{
+  "QueryFilter": {
+    "expression": {
+      "argument": [
+        "executionId",
+        "YOUR_EXECUTION_ID"
+      ],
+      "operator": "EQUALS"
+    }
+  }
+}
+
+Example:
+
+{
+  "QueryFilter": {
+    "expression": {
+      "argument": [
+        "executionId",
+        "7ab23f91"
+      ],
+      "operator": "EQUALS"
+    }
+  }
+}
+
+Requirements:
+
+Call ONLY for failed/error executions
+Do NOT call for COMPLETE executions
+Handle empty API responses gracefully
+If connector response is empty, display:
+No connector error details available
+Preserve mapping between:
+executionId
+connector errors
+process execution record
+
+The executionId acts as the correlation key between process logs and connector diagnostics. Without it, troubleshooting becomes ceremonial suffering.
+
+Step 5: Extract Error Details from Execution Connector Response
+
+From the Execution Connector response extract:
+
+connectorName
+connectorType
+operationName
+errorMessage
+errorCode
+documentId
+timestamp
+stackTrace (if available)
+
+If fields are unavailable, display:
+
+N/A
+
+Because enterprise APIs treat consistency as a hobby, not a contract.
+
+Step 6: Generate Output in STRICT FORMAT
+Section 1: Header
+
+Display:
+
+Process Execution Logs Analysis
+Process: {processName}
+Process ID: {processId}
+Time Range: {startDate} - {endDate}
+Section 2: Execution Summary
+
+Display:
+
+Total Executions
+Successful (count + %)
+Failed (count + %)
+In Progress (count + % if applicable)
+Section 3: Execution Details Table
+
+Display table columns:
+
+Execution ID	Execution Time	Status	Duration (ms)	Inbound Docs	Error Docs	Outbound Docs
+
+Status format:
+
+✅ COMPLETE
+❌ ERROR
+⏳ IN PROGRESS
+
+Execution ID should be shortened.
+
+Example:
+
+7ab23f91...
+Section 4: Process Health Status
+
+Rules:
+
+All COMPLETE and no errors → HEALTHY
+Some failures/anomalies → UNSTABLE
+Heavy failures or severe anomalies → CRITICAL
+
+Display:
+
+✅ Process Health Status: HEALTHY
+⚠️ Process Health Status: UNSTABLE
+❌ Process Health Status: CRITICAL
+
+Also include:
+
+One-line environment summary
+One-line reliability summary
+Section 5: Performance Metrics
+
+Calculate:
+
+Average Duration
+Minimum Duration
+Maximum Duration
+Median Duration
+
+Document statistics:
+
+Total Inbound Documents
+Total Outbound Documents
+Error Documents
+Processing Success Rate
+
+Formula:
+
+((Total Executions - Failed Executions) / Total Executions) * 100
+Section 6: Performance Anomalies
+
+Detect slow executions using median duration comparison.
+
+Rules:
+
+Duration ≥ 2x median → Moderate
+Duration ≥ 4x median → High
+Duration ≥ 6x median → Critical
+
+Display:
+
+Execution ID	Execution Time	Duration	Severity	Comparison
+
+Example:
+
+Execution exceeded median by 4.8x
+Section 7: Failed Execution Error Analysis
+
+For every failed execution display:
+
+Execution ID
+Execution Time
+Connector
+Operation
+Error Code
+Error Message
+Document ID
+Atom
+
+If stack trace exists:
+
+Stack Trace:
+
+Summarize probable root cause.
+
+Example:
+
+Root Cause:
+External API timeout during connector operation.
+
+Humanity built distributed systems just to spend eternity diagnosing why one connector suddenly decided reality was optional.
+
+Section 8: Observations
+
+Include insights such as:
+
+Execution consistency
+Duration patterns
+Output variability
+Atom/environment consistency
+Connector failure concentration
+Error recurrence patterns
+External dependency instability indicators
+Section 9: Recommendations
+
+Provide actionable recommendations:
+
+Investigate slow executions
+Review failed connector operations
+Monitor external API dependencies
+Optimize large payload handling
+Add retry/error handling
+Review Atom resource utilization
+Configure alert thresholds
+Capacity planning if execution growth detected
