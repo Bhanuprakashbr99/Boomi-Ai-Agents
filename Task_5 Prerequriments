@@ -1,0 +1,61 @@
+This task requires external components to enable OCR processing and local-to-cloud connectivity.
+
+1. Tesseract OCR Setup
+
+Tesseract is used to extract text from PDF documents since Boomi does not provide built-in OCR support.
+
+📌 Installation Steps
+
+Windows:
+
+Download installer from: https://github.com/UB-Mannheim/tesseract/wiki
+Install Tesseract (default path usually: C:\Program Files\Tesseract-OCR)
+Add Tesseract to system PATH:
+Environment Variables → PATH → add Tesseract folder path
+
+Verify Installation:
+
+tesseract --version
+
+Mac (Homebrew):
+
+brew install tesseract
+
+Linux (Ubuntu):
+
+sudo apt update
+sudo apt install tesseract-ocr
+▶️ Running Tesseract
+
+Basic command to extract text from a PDF/image:
+
+tesseract input.pdf output -l eng
+input.pdf → Source file
+output → Output text file (without extension)
+-l eng → Language (English)
+2. Ngrok Setup
+
+Ngrok is used to expose local services (like OCR APIs or file processors) to the cloud via a secure public URL.
+
+📌 Installation Steps
+Download Ngrok from: https://ngrok.com/download
+Extract and install
+Sign up and get auth token from dashboard
+🔑 Configure Ngrok
+ngrok config add-authtoken <YOUR_AUTH_TOKEN>
+▶️ Run Ngrok Tunnel
+
+To expose a local service running on port 8080:
+
+ngrok http 9090 // for triggering the Boomi Local Host
+
+After running, Ngrok generates a public URL like:
+
+https://abcd1234.ngrok-free.app
+
+This URL is used in Boomi Base URL to connect cloud workflows to local OCR services.
+
+⚙️ Summary
+Tesseract OCR → Extracts text from PDF documents locally
+Ngrok → Exposes local OCR service to Boomi cloud environment
+Both tools together enable the AI Agent to process documents end-to-end (because Boomi prefers outsourcing reading skills).
