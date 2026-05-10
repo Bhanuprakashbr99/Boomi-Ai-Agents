@@ -1,0 +1,89 @@
+import java.io.*
+import com.boomi.execution.ExecutionUtil
+
+for (int i = 0; i < dataContext.getDataCount(); i++) {
+
+    InputStream is = dataContext.getStream(i)
+    Properties props = dataContext.getProperties(i)
+
+    // 🔹 Get FILE_NAME from Dynamic Process Property
+    String fileName = ExecutionUtil.getDynamicProcessProperty("FILE_NAME")
+
+    if (fileName == null || fileName.trim().isEmpty()) {
+        fileName = "default.pdf"
+    }
+
+    // Ensure .pdf extension
+    if (!fileName.toLowerCase().endsWith(".pdf")) {
+        fileName = fileName + ".pdf"
+    }
+
+    // 🔹 Add uniqueness to avoid overwrite
+    String uniqueName = System.currentTimeMillis() + "_" + fileName
+
+    // 🔹 Temp directory
+    File baseTempDir = new File(System.getProperty("java.io.tmpdir"))
+    File workingDir = new File(baseTempDir, "ocr_" + System.currentTimeMillis())
+    workingDir.mkdir()
+
+    // 🔹 Save PDF
+    File pdfFile = new File(workingDir, uniqueName)
+    pdfFile.bytes = is.bytes
+
+    ExecutionUtil.getBaseLogger().info("Processing file: " + pdfFile.absolutePath)
+
+    // 🔹 Output prefix for images
+    String outputPrefix = new File(workingDir, "page").absolutePath
+
+    // 🔹 Step 1: PDF → Images
+    def convertCmd = ["pdftoppm", "-png", pdfFile.absolutePath, outputPrefix]
+    def convertProcess = new ProcessBuilder(convertCmd)
+            .redirectErrorStream(true)
+            .start()
+
+    convertProcess.waitFor()
+
+    ExecutionUtil.getBaseLogger().info("PDF converted to images")
+
+    // 🔹 Step 2: OCR each image
+    File[] files = workingDir.listFiles()
+
+    List<File> images = files.findAll { it.name.endsWith(".png") }
+    images.sort { it.name }  // maintain order
+
+    StringBuilder finalText = new StringBuilder()
+
+    images.each { img ->
+
+        File outBase = new File(workingDir, img.name + "_out")
+
+        def ocrCmd = ["tesseract", img.absolutePath, outBase.absolutePath]
+        def ocrProcess = new ProcessBuilder(ocrCmd)
+                .redirectErrorStream(true)
+                .start()
+
+        ocrProcess.waitFor()
+
+        File txtFile = new File(outBase.absolutePath + ".txt")
+
+        if (txtFile.exists()) {
+            finalText.append(txtFile.text).append("\n")
+            txtFile.delete()
+        }
+
+        // cleanup image
+        img.delete()
+    }
+
+    // 🔹 Step 3: Output text
+    ByteArrayInputStream outputStream =
+        new ByteArrayInputStream(finalText.toString().getBytes("UTF-8"))
+
+    dataContext.storeStream(outputStream, props)
+
+    // 🔹 Cleanup PDF + folder
+    pdfFile.delete()
+    workingDir.delete()
+
+    ExecutionUtil.getBaseLogger().info("OCR completed for: " + fileName)
+}
